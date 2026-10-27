@@ -54,10 +54,10 @@ export default function BatchStreamPage() {
         <div className="bux-card p-5">
           <div className="flex items-center space-x-2 text-cyan-400 text-xs font-bold uppercase tracking-wider mb-2">
             <ShieldCheck className="w-4 h-4" />
-            <span>Pre-Flight Validation</span>
+            <span>Pre-Flight & Asset Breakdown</span>
           </div>
           <p className="text-xs text-gray-300">
-            Client-side parser verifies Stellar public key formats and math constraints before prompting Freighter signing.
+            Client-side parser validates CSV headers, Stellar public keys, Soroban token contracts, and per-token escrow totals before prompting Freighter signing.
           </p>
         </div>
       </div>
