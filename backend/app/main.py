@@ -447,6 +447,11 @@ async def withdraw_tokens(
     actor: str | None = Query(None, description="Signer executing the withdrawal transaction"),
 ):
     stream = await get_stream(stream_id)
+    if actor is not None and actor not in (stream.recipient, stream.sender):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized: caller is not the stream recipient",
+        )
     if stream.claimable_amount <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -459,10 +464,16 @@ async def withdraw_tokens(
 
     conn = get_db_connection()
     with conn:
-        conn.execute(
-            "UPDATE streams SET claimed_amount = ? WHERE id = ?",
-            (new_claimed, stream_id),
+        cursor = conn.execute(
+            "UPDATE streams SET claimed_amount = ? WHERE id = ? AND claimed_amount = ? AND is_cancelled = 0",
+            (new_claimed, stream_id, stream.claimed_amount),
         )
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No unlocked tokens currently available to withdraw",
+            )
         conn.execute(
             """
             INSERT INTO stream_events (stream_id, event_type, actor, amount, timestamp)
