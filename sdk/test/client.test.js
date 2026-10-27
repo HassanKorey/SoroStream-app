@@ -93,6 +93,20 @@ assert.strictEqual(cancelPayload.method, 'cancel_stream');
 assert.strictEqual(cancelPayload.args.stream_id, 42);
 assert.strictEqual(cancelPayload.args.sender, validOptions.sender);
 
+const batchPayload = client.buildBatchCreateTransactionPayload(validOptions.sender, validOptions.token, [
+  {
+    recipient: validOptions.recipient,
+    amount: params.amount,
+    startTime: params.startTime,
+    cliffTime: params.cliffTime,
+    endTime: params.endTime,
+    revocable: true,
+  },
+]);
+assert.strictEqual(batchPayload.method, 'create_batch_streams');
+assert.strictEqual(batchPayload.args.streams.length, 1);
+assert.strictEqual(batchPayload.args.streams[0].amount, '1505000000');
+
 // 6. Test Freighter signing helper with mock signer
 async function testFreighterSigning() {
   const mockSigner = {
@@ -144,7 +158,78 @@ function testStreamPolling() {
   stopPoll();
 }
 
-Promise.all([testFreighterSigning(), testBalanceQuery()])
+// 9. Test CRUD methods (getStream, listStreams, createStream, createBatchStreams, withdraw, cancelStream) with mocked fetch
+async function testCrudMethodsWithMockFetch() {
+  const originalFetch = global.fetch;
+  const mockStreamRaw = {
+    id: 7,
+    sender: validOptions.sender,
+    recipient: validOptions.recipient,
+    token: validOptions.token,
+    token_symbol: 'USDC',
+    token_decimals: 7,
+    total_amount: 100_000_000,
+    claimed_amount: 20_000_000,
+    start_time: 1000,
+    cliff_time: 2000,
+    end_time: 6000,
+    revocable: true,
+    is_cancelled: false,
+    current_time: 3500,
+  };
+
+  global.fetch = async (url, opts) => {
+    const u = String(url);
+    if (u.endsWith('/api/streams/batch')) {
+      return { ok: true, json: async () => [mockStreamRaw] };
+    }
+    if (u.includes('/api/streams?') || u.endsWith('/api/streams')) {
+      if (opts && opts.method === 'POST') {
+        return { ok: true, json: async () => mockStreamRaw };
+      }
+      return { ok: true, json: async () => [mockStreamRaw] };
+    }
+    if (u.includes('/withdraw')) {
+      return {
+        ok: true,
+        json: async () => ({ ...mockStreamRaw, claimed_amount: 50_000_000 }),
+      };
+    }
+    if (u.includes('/cancel')) {
+      return {
+        ok: true,
+        json: async () => ({ ...mockStreamRaw, is_cancelled: true }),
+      };
+    }
+    return { ok: true, json: async () => mockStreamRaw };
+  };
+
+  try {
+    const fetched = await client.getStream(7);
+    assert.strictEqual(fetched.id, 7);
+    assert.strictEqual(fetched.claimableAmount, BigInt(30_000_000));
+
+    const listed = await client.listStreams({ sender: validOptions.sender });
+    assert.strictEqual(listed.length, 1);
+
+    const created = await client.createStream(params);
+    assert.strictEqual(created.id, 7);
+
+    const batchCreated = await client.createBatchStreams(validOptions.sender, [params]);
+    assert.strictEqual(batchCreated.length, 1);
+
+    const withdrawn = await client.withdraw(7, validOptions.recipient);
+    assert.strictEqual(withdrawn.claimedAmount, BigInt(50_000_000));
+
+    const cancelled = await client.cancelStream(7, validOptions.sender);
+    assert.strictEqual(cancelled.isCancelled, true);
+    assert.strictEqual(cancelled.status, 'cancelled');
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
+Promise.all([testFreighterSigning(), testBalanceQuery(), testCrudMethodsWithMockFetch()])
   .then(() => {
     testStreamPolling();
     console.log('All @sorostream/sdk SoroStreamClient tests passed!');

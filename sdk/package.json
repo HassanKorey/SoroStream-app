@@ -4,9 +4,12 @@
   "description": "Official TypeScript SDK for SoroStream Soroban Token Vesting & Asset Streaming Protocol",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
-    "test": "node test/run.js"
+    "test": "tsc && node test/run.js"
   },
   "keywords": [
     "stellar",
