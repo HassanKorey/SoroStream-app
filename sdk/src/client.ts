@@ -113,6 +113,36 @@ export class SoroStreamClient {
   }
 
   /**
+   * Creates a batch of vesting streams atomically in the indexer.
+   */
+  async createBatchStreams(sender: string, streams: CreateStreamParams[]): Promise<StreamDetail[]> {
+    const payload = {
+      sender,
+      streams: streams.map((s) => ({
+        sender: s.sender,
+        recipient: s.recipient,
+        token: s.token,
+        amount: Number(s.amount),
+        start_time: s.startTime,
+        cliff_time: s.cliffTime,
+        end_time: s.endTime,
+        revocable: s.revocable,
+      })),
+    };
+    const res = await fetch(`${this.indexerUrl}/api/streams/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to create batch streams');
+    }
+    const items = await res.json();
+    return items.map((i: any) => this.mapStreamResponse(i));
+  }
+
+  /**
    * Polls a stream at a regular interval, executing a callback with refreshed data.
    */
   pollStream(
@@ -287,6 +317,32 @@ export class SoroStreamClient {
       args: {
         sender,
         stream_id: streamId,
+      },
+    };
+  }
+
+  /**
+   * Builds the invocation contract payload for create_batch_streams.
+   */
+  buildBatchCreateTransactionPayload(
+    sender: string,
+    token: string,
+    items: BatchStreamItem[]
+  ): TransactionPayload {
+    return {
+      contractId: this.contractId,
+      method: 'create_batch_streams',
+      args: {
+        sender,
+        token,
+        streams: items.map((item) => ({
+          recipient: item.recipient,
+          amount: item.amount.toString(),
+          start: item.startTime,
+          cliff: item.cliffTime,
+          end: item.endTime,
+          revocable: item.revocable,
+        })),
       },
     };
   }

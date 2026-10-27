@@ -62,3 +62,33 @@ export function calculateVesting(
     status,
   };
 }
+
+/**
+ * Formats a raw integer stroop/smallest-unit balance into a fixed-precision decimal string.
+ */
+export function formatStroops(
+  amount: bigint,
+  decimals: number = 7,
+  precision: number = 2
+): string {
+  const divisor = 10 ** decimals;
+  return (Number(amount) / divisor).toFixed(precision);
+}
+
+/**
+ * Converts a human-readable token amount into raw on-chain integer units (stroops).
+ */
+export function parseTokensToStroops(
+  amountTokens: number | string,
+  decimals: number = 7
+): bigint {
+  const numAmount = typeof amountTokens === 'string' ? parseFloat(amountTokens) : amountTokens;
+  if (isNaN(numAmount) || numAmount <= 0) {
+    throw new Error(`Stream amount must be greater than 0, received: ${amountTokens}`);
+  }
+  const multiplier = BigInt(10 ** decimals);
+  const whole = BigInt(Math.floor(numAmount));
+  const fraction = numAmount - Math.floor(numAmount);
+  const fractionBigInt = BigInt(Math.round(fraction * 10 ** decimals));
+  return whole * multiplier + fractionBigInt;
+}
